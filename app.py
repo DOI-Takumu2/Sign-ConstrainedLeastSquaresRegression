@@ -20,6 +20,11 @@ if uploaded_file is not None:
     feature_cols = st.multiselect("【説明変数】", df.columns.tolist())
     intercept_flag = st.radio("【切片の設定】", ["切片あり", "切片なし"])
 
+    # **各説明変数の符号制約を設定**
+    sign_constraints = {}
+    for col in feature_cols:
+        sign_constraints[col] = st.selectbox(f"{col} の符号制約", ["free", "positive", "negative"])
+
     # **回帰分析を実行**
     if st.button("回帰を実行"):
         if target_col and feature_cols:
@@ -31,8 +36,17 @@ if uploaded_file is not None:
             w = cp.Variable(n_features)
             b = cp.Variable() if intercept_flag == "切片あり" else 0
             residuals = y - (X @ w + b)
+            constraints = []
+
+            # **符号制約の適用**
+            for i, col in enumerate(feature_cols):
+                if sign_constraints[col] == "positive":
+                    constraints.append(w[i] >= 0)
+                elif sign_constraints[col] == "negative":
+                    constraints.append(w[i] <= 0)
+
             objective = cp.Minimize(cp.sum_squares(residuals))
-            problem = cp.Problem(objective, [])
+            problem = cp.Problem(objective, constraints)
             result = problem.solve(solver=cp.OSQP)
 
             coef_vals = w.value
@@ -50,7 +64,7 @@ if uploaded_file is not None:
             st.write(f"目的関数値(SSR): {problem.value:.4f}")
             st.write(f"切片: {intercept_val:.4f}")
             for col, cval in zip(feature_cols, coef_vals):
-                st.write(f"{col}: {cval:.4f}")
+                st.write(f"{col}: {cval:.4f} ({sign_constraints[col]})")
 
             st.write("【評価指標】")
             st.write(f"MSE: {mse:.4f}")
@@ -60,7 +74,7 @@ if uploaded_file is not None:
 
             # **結果の Excel ダウンロード**
             output = io.BytesIO()
-            df_results = pd.DataFrame({"Feature": feature_cols, "Coefficient": coef_vals})
+            df_results = pd.DataFrame({"Feature": feature_cols, "Coefficient": coef_vals, "Sign Constraint": [sign_constraints[col] for col in feature_cols]})
             df_metrics = pd.DataFrame({"Metric": ["MSE", "RMSE", "MAE", "R^2"], "Value": [mse, rmse, mae, r2]})
             
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
