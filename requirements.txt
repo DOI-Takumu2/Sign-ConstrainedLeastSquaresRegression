@@ -6,3 +6,6 @@ statsmodels
 scikit-learn
 pmdarima
 openpyxl
+cvxpy
+xlrd
+ipywidgets
