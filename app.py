@@ -22,6 +22,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# **スペース（余白）を追加**
+st.markdown("<br><br>", unsafe_allow_html=True)
+# **ファイルアップロード**
+uploaded_file = st.file_uploader("Excel ファイル (.xlsx) をアップロードしてください", type=["xlsx"])
+
+
 # **ツールの引用表記を右寄せに変更**
 st.markdown(
     """
@@ -36,10 +42,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# **スペース（余白）を追加**
-st.markdown("<br><br>", unsafe_allow_html=True)
-# **ファイルアップロード**
-uploaded_file = st.file_uploader("Excel ファイル (.xlsx) をアップロードしてください", type=["xlsx"])
+
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
