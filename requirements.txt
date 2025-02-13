@@ -10,4 +10,5 @@ cvxpy
 xlrd
 ipywidgets
 xlsxwriter
-
+ecos
+osqp
