@@ -42,13 +42,36 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# t値のフォーマット用関数
-def format_t_value_for_latex(t):
-    """t値がNaNでなければ (t=XXX) を返し, NaNなら空文字を返す."""
-    if pd.isna(t):
-        return ""
+def format_t_and_sign(t_val, sign_val):
+    """
+    t値と符号制約を substack でまとめた上付き文字列を返す。
+    - t値がNaNの場合は (t=...) を表示しない。
+    - sign_val は 'free', 'positive', 'negative' または '(None)' を想定。
+    """
+    # t値の整形
+    t_str = ""
+    if not pd.isna(t_val):
+        t_str = f"(t={t_val:.4f})"
+
+    # signの整形
+    # (None) は切片の場合などに使う
+    if sign_val is None:
+        sign_str = "(sign=none)"
     else:
-        return f"(t={t:.4f})"
+        sign_str = f"(sign={sign_val})"
+
+    # t値も sign もないとき
+    if (t_str == "") and (sign_str == "(sign=none)" or sign_str == ""):
+        return ""  # 何も表示しない
+    
+    # substack で改行させる
+    # 例:  \substack{(t=1.2345) \\ (sign=positive)}
+    # t_val がNaNの場合は sign だけ表示
+    if t_str != "":
+        return rf"^\substack{{{t_str}\\{sign_str}}}"
+    else:
+        # tなし signだけ
+        return rf"^\substack{{{sign_str}}}"
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
@@ -173,32 +196,53 @@ if uploaded_file is not None:
                 t_values = [np.nan]*(n_features + (1 if intercept_flag == "切片あり" else 0))
 
             # --- 9. 結果表示 ---
+            st.subheader("【回帰式（数式表示）】")
 
-            # 9-1. 回帰係数をLaTeX数式で表示
-            st.subheader("【回帰係数（数式表示）】")
-            latex_str = r"\begin{aligned}"
+            # 目的変数名
+            # 例: y = ...
+            latex_equation = rf"{target_col} = "
 
-            # 先にSSR(目的関数値)を取得
+            # 切片 (if intercept_flag == 切片あり)
+            if intercept_flag == "切片あり":
+                t_int = t_values[-1]  # 切片のt値
+                # (t=..., sign=none) を substack表示
+                intercept_exponent = format_t_and_sign(t_int, None)  # sign=None として扱う
+                intercept_str = rf"\beta_0{intercept_exponent}"
+                latex_equation += intercept_str
+            else:
+                # 切片なしの場合は何も足さない
+                intercept_str = ""
+
+            # それぞれの係数×変数を追加
+            # β_i^(...) x_i
+            # ただし、最初の項以降は " + " を付ける
+            for i, col in enumerate(feature_cols):
+                # t値
+                t_val_current = t_values[i] if intercept_flag == "切片あり" else t_values[i]
+                sign_val = sign_constraints[col]
+                exponent_str = format_t_and_sign(t_val_current, sign_val)
+
+                # 例: \beta_1^(t=..., sign=positive) x_1
+                term_str = rf"\beta_{{{i+1}}}{exponent_str} x_{{\text{{{col}}}}}"
+
+                if i == 0 and intercept_flag == "切片あり":
+                    # 切片がある場合、これは「 + 」で繋ぐ
+                    latex_equation += rf" + {term_str}"
+                elif i == 0 and intercept_flag == "切片なし":
+                    # 切片なしの場合、最初の項なので「 = β_1 x_1」 の形
+                    latex_equation += term_str
+                else:
+                    # 2番目以降
+                    latex_equation += rf" + {term_str}"
+
+            # 数式を $$...$$ で囲んで表示
+            latex_display = f"$$ {latex_equation} $$"
+            st.markdown(latex_display)
+
+            # 目的関数値(SSR)
             ssr_val = problem.value
 
-            if intercept_flag == "切片あり":
-                t_str_intercept = format_t_value_for_latex(t_values[-1])
-                latex_str += (
-                    rf"\text{{Intercept}} &= {intercept_val:.4f}\;{t_str_intercept} \\ "
-                )
-
-            for i, col in enumerate(feature_cols):
-                t_str_current = format_t_value_for_latex(t_values[i])
-                latex_str += (
-                    rf"{col}\, [\text{{{sign_constraints[col]}}}]"
-                    + rf" &= {coef_vals[i, 0]:.4f}\;{t_str_current} \\ "
-                )
-
-            latex_str += r"\end{aligned}"
-            # Streamlit では Markdown + 数式ブロックで表示
-            st.markdown(f"$$ {latex_str} $$")
-
-            # 9-2. メトリクスを表形式で表示
+            # 表形式で指標を表示
             st.subheader("【評価指標】")
             metrics_data = [
                 ["SSR (Sum of Squared Residuals)", f"{ssr_val:.4f}"],
@@ -264,10 +308,10 @@ if uploaded_file is not None:
 
             # --- 主要なポイントまとめ ---
             """
-            1. 回帰係数は LaTeX 数式形式で表示し、t値が無い(=NaN)場合は表示しないようにした。
-            2. 目的関数値(SSR)や評価指標は pandas.DataFrame から st.table で表形式表示。
-            3. 欠損や型違いは平均値で補完し、ソルバー切り替えで安定性を確保。
-            4. Excel には従来通り 'Coefficients'・'Metrics' シートで結果を出力。
+            1. 目的変数名 = 切片(上付きに t値・sign) + Σ (係数(上付きに t値・sign) × 説明変数)
+            2. t値が NaN の場合は (t=..) 表示を省略。切片は sign=none として扱う。
+            3. 目的関数値や各種評価指標は表形式で表示。
+            4. 欠損値や型違いデータは平均値で補完し、OSQP → ECOS の順でソルバーを試行。
             """
 
         except Exception as e:
