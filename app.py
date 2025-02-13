@@ -28,7 +28,6 @@ st.markdown(
     <div style="text-align: right; font-size: 12px; color: gray; margin-top: 20px;">
         本ツールを使用する際は、以下の例のように引用を記載していただけると嬉しいです。<br>
         <i>If you use this tool, we would appreciate it if you could cite it as follows:</i><br><br>
-        <b>土居拓務（2025）SignReg [Computer software]. 使用日: YYYY-MM-DD.</b><br>
         <b>DOI, Takumu (2025). SignReg [Computer software]. Usage date: YYYY-MM-DD.</b>
     </div>
     """,
