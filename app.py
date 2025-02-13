@@ -26,8 +26,8 @@ st.markdown(
 st.markdown(
     """
     <div style="text-align: right; font-size: 12px; color: gray; margin-top: 20px;">
-        本ツールを使用する際は、以下のように引用を記載してください：<br>
-        <b>土居拓務（2025）SignReg: 符号条件付き回帰分析ツール [Computer software]. 使用日: YYYY-MM-DD.</b>
+        本ツールを使用する際は、以下のように引用を記載していただけると嬉しいです。：<br>
+        <b>DOI, Takumu（2025）SignReg: 符号条件付き回帰分析ツール [Computer software]. 使用日: YYYY-MM-DD.</b>
     </div>
     """,
     unsafe_allow_html=True
