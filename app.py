@@ -12,7 +12,7 @@ os.system("pip install xlsxwriter")
 # **ツールタイトル**
 st.title("符号条件付き回帰分析")
 
-# **製作者名をタイトル下に表示**
+# **製作者名をタイトル下に表示（右寄せ）**
 st.markdown(
     """
     <div style="text-align: right; font-size: 12px; color: gray;">
@@ -22,14 +22,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# **ツールの引用表記を右下に小さく表示（フォントサイズ調整 & スペース詰め）**
+# **ツールの引用表記を右寄せに変更**
 st.markdown(
     """
-    <div style="text-align: center; font-size: 10px; color: gray; margin-bottom: 5px;">
+    <div style="text-align: right; font-size: 10px; color: gray; margin-bottom: 5px;">
         もし本ツール使用による成果物を公表する際は、以下の例のように引用していただけると嬉しいです。<br>
         <i>If you use this tool, we would appreciate it if you could cite it as follows:</i>
     </div>
-    <div style="text-align: center; font-size: 12px; font-weight: bold;">
+    <div style="text-align: right; font-size: 12px; font-weight: bold;">
         DOI, Takumu (2025). SignReg [Computer software]. Usage date: YYYY-MM-DD.
     </div>
     """,
