@@ -43,8 +43,8 @@ st.markdown(
 )
 
 # t値のフォーマット用関数
-def format_t_value(t):
-    """t値がNaNでなければ (t=XXX) の文字列を返し, NaNなら空文字を返す."""
+def format_t_value_for_latex(t):
+    """t値がNaNでなければ (t=XXX) を返し, NaNなら空文字を返す."""
     if pd.isna(t):
         return ""
     else:
@@ -80,16 +80,13 @@ if uploaded_file is not None:
             # --- 3. 数値型への変換 + 欠損の集計 + 平均値補完 ---
             total_filled = 0
             for col in analysis_cols:
-                # 数値変換（変換できない値は NaN になる）
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = pd.to_numeric(df[col], errors='coerce')  # 数値変換
 
-            # 各列ごとに欠損値を平均値で埋める
             for col in analysis_cols:
                 n_missing_before = df[col].isnull().sum()
                 if n_missing_before > 0:
                     col_mean = df[col].mean()
-                    # col_mean が NaN の場合、全ての行が NaN か計算不能 -> 0.0 で埋めるなど適宜対応
-                    if pd.isna(col_mean):
+                    if pd.isna(col_mean):  # 全行NaNの場合など
                         col_mean = 0.0
                     df[col].fillna(col_mean, inplace=True)
                     n_filled = n_missing_before - df[col].isnull().sum()
@@ -150,7 +147,6 @@ if uploaded_file is not None:
             # --- 8. 近似的な t 値の計算 ---
             t_values = []
             try:
-                # デザイン行列（切片ありの場合は最後に1列足す）
                 if intercept_flag == "切片あり":
                     X_design = np.hstack([X, np.ones((n_samples, 1))])
                     w_full = np.vstack([coef_vals, intercept_val])
@@ -177,33 +173,50 @@ if uploaded_file is not None:
                 t_values = [np.nan]*(n_features + (1 if intercept_flag == "切片あり" else 0))
 
             # --- 9. 結果表示 ---
-            st.write("【回帰結果】")
-            st.write(f"目的関数値(SSR): {problem.value:.4f}")
 
-            # 切片（intercept_flagがある場合）
+            # 9-1. 回帰係数をLaTeX数式で表示
+            st.subheader("【回帰係数（数式表示）】")
+            latex_str = r"\begin{aligned}"
+
+            # 先にSSR(目的関数値)を取得
+            ssr_val = problem.value
+
             if intercept_flag == "切片あり":
-                t_str_intercept = format_t_value(t_values[-1])
-                st.write(f"切片: {intercept_val:.4f} {t_str_intercept}")
+                t_str_intercept = format_t_value_for_latex(t_values[-1])
+                latex_str += (
+                    rf"\text{{Intercept}} &= {intercept_val:.4f}\;{t_str_intercept} \\ "
+                )
 
-            # 各特徴量
             for i, col in enumerate(feature_cols):
-                t_val_current = t_values[i]
-                t_str_current = format_t_value(t_val_current)
-                st.write(f"{col}: {coef_vals[i, 0]:.4f} [{sign_constraints[col]}] {t_str_current}")
+                t_str_current = format_t_value_for_latex(t_values[i])
+                latex_str += (
+                    rf"{col}\, [\text{{{sign_constraints[col]}}}]"
+                    + rf" &= {coef_vals[i, 0]:.4f}\;{t_str_current} \\ "
+                )
 
-            st.write("【評価指標】")
-            st.write(f"MSE: {mse:.4f}")
-            st.write(f"RMSE: {rmse:.4f}")
-            st.write(f"MAE: {mae:.4f}")
-            st.write(f"R^2: {r2:.4f}")
+            latex_str += r"\end{aligned}"
+            # Streamlit では Markdown + 数式ブロックで表示
+            st.markdown(f"$$ {latex_str} $$")
+
+            # 9-2. メトリクスを表形式で表示
+            st.subheader("【評価指標】")
+            metrics_data = [
+                ["SSR (Sum of Squared Residuals)", f"{ssr_val:.4f}"],
+                ["MSE (Mean Squared Error)", f"{mse:.4f}"],
+                ["RMSE (Root Mean Squared Error)", f"{rmse:.4f}"],
+                ["MAE (Mean Absolute Error)", f"{mae:.4f}"],
+                ["R^2 (Coefficient of Determination)", f"{r2:.4f}"],
+            ]
+            metrics_df = pd.DataFrame(metrics_data, columns=["Metric", "Value"])
+            st.table(metrics_df)
 
             # --- 10. ダウンロード用ファイル生成 ---
             output = io.BytesIO()
 
+            # Excelに出力するデータフレーム（Coefficients, Metrics）
             if intercept_flag == "切片あり":
                 feature_list = ["Intercept"] + feature_cols
                 coef_list = [intercept_val] + list(coef_vals.flatten())
-                # t値の順番：最後が切片
                 t_value_list = [t_values[-1]] + t_values[0:-1]
                 sign_list = ["(None)"] + [sign_constraints[col] for col in feature_cols]
             else:
@@ -220,8 +233,20 @@ if uploaded_file is not None:
             })
 
             df_metrics = pd.DataFrame({
-                "Metric": ["MSE", "RMSE", "MAE", "R^2"],
-                "Value": [mse, rmse, mae, r2]
+                "Metric": [
+                    "SSR",
+                    "MSE",
+                    "RMSE",
+                    "MAE",
+                    "R^2"
+                ],
+                "Value": [
+                    ssr_val,
+                    mse,
+                    rmse,
+                    mae,
+                    r2
+                ]
             })
 
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -239,14 +264,13 @@ if uploaded_file is not None:
 
             # --- 主要なポイントまとめ ---
             """
-            1. 欠損値や型違いの値は自動的に NaN に変換し、平均値で補完するためエラーが起こりにくい。
-            2. ソルバーが収束しない場合は別のソルバーに切り替えます。
-            3. t値は OLSに基づく近似値であり、符号制約の影響を厳密には反映しない場合があります。
-            4. 結果はExcelファイルに出力可能です。
+            1. 回帰係数は LaTeX 数式形式で表示し、t値が無い(=NaN)場合は表示しないようにした。
+            2. 目的関数値(SSR)や評価指標は pandas.DataFrame から st.table で表形式表示。
+            3. 欠損や型違いは平均値で補完し、ソルバー切り替えで安定性を確保。
+            4. Excel には従来通り 'Coefficients'・'Metrics' シートで結果を出力。
             """
 
         except Exception as e:
-            # 万が一ここまでで想定外のエラーが出たときも、Streamlitを落とさないために捕捉する
             st.error(f"エラーが発生しました: {e}")
 else:
     st.write("上記に Excel ファイルをアップロードしてください。")
