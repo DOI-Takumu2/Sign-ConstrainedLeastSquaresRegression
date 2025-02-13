@@ -24,9 +24,9 @@ st.markdown(
 
 # **スペース（余白）を追加**
 st.markdown("<br><br>", unsafe_allow_html=True)
+
 # **ファイルアップロード**
 uploaded_file = st.file_uploader("Excel ファイル (.xlsx) をアップロードしてください", type=["xlsx"])
-
 
 # **ツールの引用表記を右寄せに変更**
 st.markdown(
@@ -42,8 +42,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
-
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
     st.write("アップロードしたデータの先頭5行:")
@@ -55,46 +53,7 @@ if uploaded_file is not None:
     intercept_flag = st.radio("【切片の設定】", ["切片あり", "切片なし"])
 
     # **各説明変数の符号制約を設定**
-    sign_constraints = {}
-    for col in feature_cols:
-        sign_constraints[col] = st.selectbox(f"{col} の符号制約", ["free", "positive", "negative"])
-
-    # **t値の計算関数**
-    def calc_t_values(X, y, w_fit, intercept_flag):
-        """
-        OLSの公式を用いた近似的なt値を計算する。
-        - X, y: データ (numpy.ndarray)
-        - w_fit: フィットされた係数ベクトル
-                 （切片がある場合は w_fit=[b, w1, w2, ...] の形を想定）
-        - intercept_flag: True → 切片あり, False → 切片なし
-        """
-        n_samples, n_features_raw = X.shape
-        
-        # 切片ありの場合は X を拡張 (先頭列=1)
-        if intercept_flag:
-            X_aug = np.hstack([np.ones((n_samples, 1)), X])
-            k = n_features_raw + 1  # パラメータ数
-        else:
-            X_aug = X
-            k = n_features_raw
-
-        # 残差を計算
-        y_pred = X_aug @ w_fit
-        residuals = y - y_pred
-        sse = np.sum(residuals**2)
-        
-        # 自由度調整 (暫定的に n_samples - k で割る)
-        mse = sse / (n_samples - k)
-
-        # (X^T X)^{-1} を計算
-        xtx_inv = np.linalg.inv(X_aug.T @ X_aug)
-        
-        # 各パラメータの標準誤差 = mse * 対角成分
-        var_params = mse * np.diag(xtx_inv)
-        se_params = np.sqrt(var_params)
-        
-        t_values = w_fit / se_params
-        return t_values
+    sign_constraints = {col: st.selectbox(f"{col} の符号制約", ["free", "positive", "negative"]) for col in feature_cols}
 
     # **回帰分析を実行**
     if st.button("回帰を実行"):
@@ -118,15 +77,31 @@ if uploaded_file is not None:
 
             objective = cp.Minimize(cp.sum_squares(residuals))
             problem = cp.Problem(objective, constraints)
-            result = problem.solve(solver=cp.OSQP)
+
+            try:
+                result = problem.solve(solver=cp.OSQP)
+            except:
+                st.warning("OSQP ソルバーで解が求まらなかったため、ECOS ソルバーに切り替えます。")
+                result = problem.solve(solver=cp.ECOS)
 
             coef_vals = w.value
             intercept_val = b.value if intercept_flag == "切片あり" else 0.0
-            y_pred = X @ coef_vals + intercept_val
 
-            # **t値の計算**
-            w_fit_ols_like = np.concatenate([[intercept_val], coef_vals]) if intercept_flag == "切片あり" else coef_vals
-            t_values = calc_t_values(X, y, w_fit_ols_like, intercept_flag)
+            # **エラーハンドリング**
+            if coef_vals is None:
+                st.error("エラー: 最適化が収束せず、回帰係数が計算されませんでした。データのスケールを確認してください。")
+                st.stop()
+
+            if intercept_flag == "切片あり" and intercept_val is None:
+                st.error("エラー: 最適化が収束せず、切片が計算されませんでした。データのスケールを確認してください。")
+                st.stop()
+
+            # **形状を統一**
+            if coef_vals.ndim == 1:
+                coef_vals = coef_vals.reshape(-1, 1)
+
+            # **予測値の計算**
+            y_pred = X @ coef_vals + intercept_val
 
             # **評価指標**
             mse = mean_squared_error(y, y_pred)
@@ -137,15 +112,16 @@ if uploaded_file is not None:
             # **結果を表示**
             st.write("【回帰結果】")
             st.write(f"目的関数値(SSR): {problem.value:.4f}")
-            st.write(f"切片: {intercept_val:.4f} (t値: {t_values[0]:.4f})" if intercept_flag == "切片あり" else "切片なし")
-            for col, cval, tval in zip(feature_cols, coef_vals, t_values[1:] if intercept_flag == "切片あり" else t_values):
-                st.write(f"{col}: {cval:.4f} (t値: {tval:.4f}) [{sign_constraints[col]}]")
+            st.write(f"切片: {intercept_val:.4f}")
+            for col, cval in zip(feature_cols, coef_vals.flatten()):
+                st.write(f"{col}: {cval:.4f} [{sign_constraints[col]}]")
 
             st.write("【評価指標】")
             st.write(f"MSE: {mse:.4f}")
             st.write(f"RMSE: {rmse:.4f}")
             st.write(f"MAE: {mae:.4f}")
             st.write(f"R^2: {r2:.4f}")
+
 
             # **結果の Excel ダウンロード**
             output = io.BytesIO()
