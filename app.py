@@ -42,6 +42,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# t値のフォーマット用関数
+def format_t_value(t):
+    """t値がNaNでなければ (t=XXX) の文字列を返し, NaNなら空文字を返す."""
+    if pd.isna(t):
+        return ""
+    else:
+        return f"(t={t:.4f})"
+
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
     st.write("アップロードしたデータの先頭5行:")
@@ -54,7 +62,7 @@ if uploaded_file is not None:
 
     # **各説明変数の符号制約を設定**
     sign_constraints = {
-        col: st.selectbox(f"{col} の符号制約", ["free", "positive", "negative"]) 
+        col: st.selectbox(f"{col} の符号制約", ["free", "positive", "negative"])
         for col in feature_cols
     }
 
@@ -80,7 +88,7 @@ if uploaded_file is not None:
                 n_missing_before = df[col].isnull().sum()
                 if n_missing_before > 0:
                     col_mean = df[col].mean()
-                    # col_mean が NaN の場合、全ての行が NaN か計算不能 -> 対応しきれないので 0 扱い等
+                    # col_mean が NaN の場合、全ての行が NaN か計算不能 -> 0.0 で埋めるなど適宜対応
                     if pd.isna(col_mean):
                         col_mean = 0.0
                     df[col].fillna(col_mean, inplace=True)
@@ -88,10 +96,9 @@ if uploaded_file is not None:
                     total_filled += n_filled
 
             if total_filled > 0:
-                st.write(f"{total_filled} 個のデータに不備があったため平均値で補完しました。")
+                st.write(f"{total_filled} 個のデータに不備（欠損・数値以外のデータ）があったため平均値で補完しました。")
 
             # --- 4. データセットの作成 ---
-            # ここまでで欠損は消えているはず
             X = df[feature_cols].values
             y = df[target_col].values
             n_samples, n_features = X.shape
@@ -172,12 +179,17 @@ if uploaded_file is not None:
             # --- 9. 結果表示 ---
             st.write("【回帰結果】")
             st.write(f"目的関数値(SSR): {problem.value:.4f}")
-            if intercept_flag == "切片あり":
-                st.write(f"切片: {intercept_val:.4f}  (t={t_values[-1]:.4f} if not NaN)")
 
+            # 切片（intercept_flagがある場合）
+            if intercept_flag == "切片あり":
+                t_str_intercept = format_t_value(t_values[-1])
+                st.write(f"切片: {intercept_val:.4f} {t_str_intercept}")
+
+            # 各特徴量
             for i, col in enumerate(feature_cols):
-                t_val_current = t_values[i] if intercept_flag == "切片なし" else t_values[i]
-                st.write(f"{col}: {coef_vals[i, 0]:.4f} [{sign_constraints[col]}] (t={t_val_current:.4f} if not NaN)")
+                t_val_current = t_values[i]
+                t_str_current = format_t_value(t_val_current)
+                st.write(f"{col}: {coef_vals[i, 0]:.4f} [{sign_constraints[col]}] {t_str_current}")
 
             st.write("【評価指標】")
             st.write(f"MSE: {mse:.4f}")
@@ -191,6 +203,7 @@ if uploaded_file is not None:
             if intercept_flag == "切片あり":
                 feature_list = ["Intercept"] + feature_cols
                 coef_list = [intercept_val] + list(coef_vals.flatten())
+                # t値の順番：最後が切片
                 t_value_list = [t_values[-1]] + t_values[0:-1]
                 sign_list = ["(None)"] + [sign_constraints[col] for col in feature_cols]
             else:
@@ -227,9 +240,9 @@ if uploaded_file is not None:
             # --- 主要なポイントまとめ ---
             """
             1. 欠損値や型違いの値は自動的に NaN に変換し、平均値で補完するためエラーが起こりにくい。
-            2. ソルバーが収束しない場合は別のソルバーに切り替える。
-            3. t値は OLSに基づく近似値であり、符号制約の影響を厳密には反映しない。
-            4. 結果はExcelファイルに出力可能。
+            2. ソルバーが収束しない場合は別のソルバーに切り替えます。
+            3. t値は OLSに基づく近似値であり、符号制約の影響を厳密には反映しない場合があります。
+            4. 結果はExcelファイルに出力可能です。
             """
 
         except Exception as e:
