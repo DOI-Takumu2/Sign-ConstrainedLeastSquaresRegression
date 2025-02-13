@@ -9,7 +9,29 @@ import os
 # 必要なライブラリをインストール（暫定対応）
 os.system("pip install xlsxwriter")
 
+# **ツールタイトル**
 st.title("符号条件付き回帰分析")
+
+# **製作者名をタイトル下に表示**
+st.markdown(
+    """
+    <div style="text-align: right; font-size: 12px; color: gray;">
+        <b>土居拓務（DOI, Takumu）</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# **ツールの引用表記を右下に小さく表示**
+st.markdown(
+    """
+    <div style="text-align: right; font-size: 12px; color: gray; margin-top: 20px;">
+        本ツールを使用する際は、以下のように引用を記載してください：<br>
+        <b>土居拓務（2025）SignReg: 符号条件付き回帰分析ツール [Computer software]. 使用日: YYYY-MM-DD.</b>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # **ファイルアップロード**
 uploaded_file = st.file_uploader("Excel ファイル (.xlsx) をアップロードしてください", type=["xlsx"])
