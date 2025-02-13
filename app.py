@@ -32,7 +32,7 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True
-)st.markdown(
+)
     """
     
 # **スペース（余白）を追加**
