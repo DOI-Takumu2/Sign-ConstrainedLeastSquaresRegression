@@ -9,3 +9,5 @@ openpyxl
 cvxpy
 xlrd
 ipywidgets
+xlsxwriter
+
