@@ -32,7 +32,8 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
+# **スペース（余白）を追加**
+st.markdown("<br><br>", unsafe_allow_html=True)
 # **ファイルアップロード**
 uploaded_file = st.file_uploader("Excel ファイル (.xlsx) をアップロードしてください", type=["xlsx"])
 
