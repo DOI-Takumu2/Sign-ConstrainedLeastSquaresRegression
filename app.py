@@ -42,9 +42,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# t値のフォーマット用関数
 def format_t_value_for_latex(t):
-    """t値がNaNでなければ (t=XXX) を返し, NaNなら空文字を返す."""
+    """t値がNaNなら空文字、NaNでなければ (t=xxx) を返す。"""
     if pd.isna(t):
         return ""
     else:
@@ -77,16 +76,16 @@ if uploaded_file is not None:
             # --- 2. 分析に使用する列のみ抽出 ---
             analysis_cols = [target_col] + feature_cols
 
-            # --- 3. 数値型への変換 + 欠損の集計 + 平均値補完 ---
+            # --- 3. 数値型への変換 + 欠損値補完 ---
             total_filled = 0
             for col in analysis_cols:
-                df[col] = pd.to_numeric(df[col], errors='coerce')  # 数値変換
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
             for col in analysis_cols:
                 n_missing_before = df[col].isnull().sum()
                 if n_missing_before > 0:
                     col_mean = df[col].mean()
-                    if pd.isna(col_mean):  # 全行NaNの場合など
+                    if pd.isna(col_mean):
                         col_mean = 0.0
                     df[col].fillna(col_mean, inplace=True)
                     n_filled = n_missing_before - df[col].isnull().sum()
@@ -115,7 +114,7 @@ if uploaded_file is not None:
             objective = cp.Minimize(cp.sum_squares(residuals))
             problem = cp.Problem(objective, constraints)
 
-            # --- 6. ソルバーを実行 (OSQP -> fallback: ECOS) ---
+            # --- 6. ソルバーを実行 ---
             try:
                 result = problem.solve(solver=cp.OSQP)
             except:
@@ -125,13 +124,12 @@ if uploaded_file is not None:
             coef_vals = w.value
             intercept_val = b.value if intercept_flag == "切片あり" else 0.0
 
-            # --- エラーチェック ---
+            # --- エラー対応 ---
             if coef_vals is None:
-                st.error("エラー: 最適化が収束しなかったため、回帰係数が計算できませんでした。データやスケールを確認してください。")
+                st.error("エラー: 最適化が収束しませんでした。データやスケールを確認してください。")
                 st.stop()
-
             if intercept_flag == "切片あり" and intercept_val is None:
-                st.error("エラー: 最適化が収束しなかったため、切片が計算できませんでした。データやスケールを確認してください。")
+                st.error("エラー: 最適化が収束しませんでした。データやスケールを確認してください。")
                 st.stop()
 
             if coef_vals.ndim == 1:
@@ -144,7 +142,7 @@ if uploaded_file is not None:
             mae = mean_absolute_error(y, y_pred)
             r2 = r2_score(y, y_pred)
 
-            # --- 8. 近似的な t 値の計算 ---
+            # --- 8. t値の近似計算 ---
             t_values = []
             try:
                 if intercept_flag == "切片あり":
@@ -169,36 +167,55 @@ if uploaded_file is not None:
                     else:
                         t_values.append(w_full_flat[i] / se_beta[i])
             except np.linalg.LinAlgError:
-                st.warning("警告: (X^T X) の逆行列が計算できませんでした。t値は計算されません。")
+                st.warning("警告: (X^T X) の逆行列を計算できませんでした。t値は計算されません。")
                 t_values = [np.nan]*(n_features + (1 if intercept_flag == "切片あり" else 0))
 
             # --- 9. 結果表示 ---
+            # (A) 回帰式のLaTeX表示
+            # 切片ありの場合:  target_col = β0 + β1 x_1 + β2 x_2 + ...
+            # 切片なし:         target_col = β1 x_1 + β2 x_2 + ...
+            st.subheader("【回帰式（数式表示）】")
 
-            # 9-1. 回帰係数をLaTeX数式で表示
-            st.subheader("【回帰係数（数式表示）】")
-            latex_str = r"\begin{aligned}"
+            # 例: "家賃 = β0 + β1 × 広さ + ..."
+            # まず左辺
+            eq_str = rf"{target_col} ="
 
-            # 先にSSR(目的関数値)を取得
-            ssr_val = problem.value
-
+            # 切片
             if intercept_flag == "切片あり":
-                t_str_intercept = format_t_value_for_latex(t_values[-1])
-                latex_str += (
-                    rf"\text{{Intercept}} &= {intercept_val:.4f}\;{t_str_intercept} \\ "
-                )
+                eq_str += rf" \beta_0 +"
+
+            # 各説明変数
+            for i, col in enumerate(feature_cols):
+                eq_str += rf" \beta_{{{i+1}}} \times \text{{{col}}}"
+                if i < len(feature_cols) - 1:
+                    eq_str += " +"
+
+            # 数式ブロックで表示
+            st.markdown(f"$$ {eq_str} $$")
+
+            # (B) 係数一覧を個別に出力
+            # - β0 = ... (sign=..., t=...)
+            # - β1 = ...
+            st.write("**各係数の推定結果：**")
+            if intercept_flag == "切片あり":
+                intercept_t = t_values[-1]
+                intercept_t_str = format_t_value_for_latex(intercept_t)
+                # sign=none として扱う
+                st.markdown(f"- **β0** = {intercept_val:.4f} (sign=none){' ' + intercept_t_str if intercept_t_str else ''}")
 
             for i, col in enumerate(feature_cols):
-                t_str_current = format_t_value_for_latex(t_values[i])
-                latex_str += (
-                    rf"{col}\, [\text{{{sign_constraints[col]}}}]"
-                    + rf" &= {coef_vals[i, 0]:.4f}\;{t_str_current} \\ "
+                sign_word = sign_constraints[col]
+                t_val_current = t_values[i] if intercept_flag == "切片あり" else t_values[i]
+                t_str_current = format_t_value_for_latex(t_val_current)
+                st.markdown(
+                    f"- **β{i+1}** = {coef_vals[i,0]:.4f} (sign={sign_word})"
+                    + (f" {t_str_current}" if t_str_current else "")
                 )
 
-            latex_str += r"\end{aligned}"
-            # Streamlit では Markdown + 数式ブロックで表示
-            st.markdown(f"$$ {latex_str} $$")
+            # 目的関数値
+            ssr_val = problem.value
 
-            # 9-2. メトリクスを表形式で表示
+            # (C) 評価指標を表形式で
             st.subheader("【評価指標】")
             metrics_data = [
                 ["SSR (Sum of Squared Residuals)", f"{ssr_val:.4f}"],
@@ -213,7 +230,7 @@ if uploaded_file is not None:
             # --- 10. ダウンロード用ファイル生成 ---
             output = io.BytesIO()
 
-            # Excelに出力するデータフレーム（Coefficients, Metrics）
+            # Excel出力用データフレーム
             if intercept_flag == "切片あり":
                 feature_list = ["Intercept"] + feature_cols
                 coef_list = [intercept_val] + list(coef_vals.flatten())
@@ -233,20 +250,8 @@ if uploaded_file is not None:
             })
 
             df_metrics = pd.DataFrame({
-                "Metric": [
-                    "SSR",
-                    "MSE",
-                    "RMSE",
-                    "MAE",
-                    "R^2"
-                ],
-                "Value": [
-                    ssr_val,
-                    mse,
-                    rmse,
-                    mae,
-                    r2
-                ]
+                "Metric": ["SSR", "MSE", "RMSE", "MAE", "R^2"],
+                "Value": [ssr_val, mse, rmse, mae, r2]
             })
 
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -264,10 +269,10 @@ if uploaded_file is not None:
 
             # --- 主要なポイントまとめ ---
             """
-            1. 回帰係数は LaTeX 数式形式で表示し、t値が無い(=NaN)場合は表示しないようにした。
-            2. 目的関数値(SSR)や評価指標は pandas.DataFrame から st.table で表形式表示。
-            3. 欠損や型違いは平均値で補完し、ソルバー切り替えで安定性を確保。
-            4. Excel には従来通り 'Coefficients'・'Metrics' シートで結果を出力。
+            - 回帰式を「目的変数 = β0 + β1×変数1 + ...」の形でLaTeX表示。
+            - その下に箇条書き形式で各係数の数値, 符号条件, t値を表示。
+            - 欠損を平均値で補完し, OSQP→ECOSでソルバーを試行。
+            - ダウンロードでは Coefficients と Metrics シートを出力。
             """
 
         except Exception as e:
